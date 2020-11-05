@@ -1,17 +1,18 @@
-import numpy as np
-from tqdm import tqdm
 import os
-from tensorflow.keras.preprocessing.image import load_img
 import pathlib
-from pathlib import Path
 import pickle
+from pathlib import Path
 
+import librosa
+import numpy as np
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import img_to_array
-from tensorflow.image import resize
-from tensorflow.keras.utils import to_categorical
-
 from sklearn.preprocessing import LabelEncoder
+from tensorflow.image import resize
+from tensorflow.keras.preprocessing.image import img_to_array, load_img
+from tensorflow.keras.utils import to_categorical
+from tqdm import tqdm
+
+opj = os.path.join
 
 
 def encode_labels(labels, new_encoding=False):
@@ -22,7 +23,7 @@ def encode_labels(labels, new_encoding=False):
             pickle.dump(label_encoder, handle, protocol=pickle.HIGHEST_PROTOCOL)
     else:
         try:
-            with open('label_encoder.pickle', 'rb') as handle:
+            with open('label_encoder.pkl', 'rb') as handle:
                 label_encoder = pickle.load(handle)
             labels = label_encoder.transform(labels)
         except:
@@ -59,7 +60,22 @@ def load_img_by_classes(input_path, no_images=None, image_size=None):
     return data, labels
 
 
-def preprocess_loaded_data(data, labels, image_size=(256, 256)):
+def preprocess_loaded_sequence_data(
+        data, labels, sequence_length=None, new_encoding=True, num_classes=None):
+
+    data = crop_sequences(data, sequence_length=sequence_length)
+    data = np.array(data)
+
+    data = tf.convert_to_tensor(data, dtype=tf.float32)
+
+    labels = encode_labels(labels, new_encoding=new_encoding)
+
+    labels = to_categorical(labels, num_classes)
+
+    return data, labels
+
+
+def preprocess_loaded_image_data(data, labels, image_size=(256, 256)):
 
     data = tf.convert_to_tensor(data, dtype=tf.float32)
 
@@ -68,3 +84,32 @@ def preprocess_loaded_data(data, labels, image_size=(256, 256)):
     labels = to_categorical(labels)
 
     return data, labels
+
+
+def load_data_by_classes(dataset_path):
+    data = []
+    labels = []
+    classes = os.listdir(dataset_path)
+    for cl in tqdm(classes):
+        full_p = opj(dataset_path, cl)
+        for file in os.listdir(full_p):
+            for i in range(0, 20, 2):
+                filepath = os.path.join(full_p, file)
+                try:
+                    wavedata, _ = librosa.load(filepath, sr=None, mono=True, offset=i, duration=2)
+                except:
+                    continue
+                wavedata = wavedata[:, np.newaxis]
+                data.append(wavedata)
+                labels.append(cl)
+
+    return data, labels
+
+
+def crop_sequences(data, sequence_length=None):
+    if sequence_length is None:
+        min_size = min([len(item) for item in data])
+        data = [item[:min_size] for item in data]
+    else:
+        data = [item[:sequence_length] for item in data]
+    return data
