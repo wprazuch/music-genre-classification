@@ -40,7 +40,7 @@ class DenseNet(Model):
 
         self.out_dense = Dense(no_classes)
 
-    def call(self, inputs, training=True):
+    def call(self, inputs, training=False):
 
         x = inputs
 
